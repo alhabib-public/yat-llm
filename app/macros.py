@@ -1,8 +1,18 @@
+"""
+Default configuration for the model, trainer and hyperparameter search.
+"""
+
 from app.utils import CfgNode as CN
 from skopt.space import Real, Integer
 
 
 def get_model_config():
+    """
+    Return the default model config.
+
+    ``n_embd`` is set from the chosen hyperparameters; ``vocab_size`` and
+    ``block_size`` are filled in from the dataset in ``app.main.train``.
+    """
     C = CN()
     C.model_type = "feedforward"
     C.data_type = "chars"
@@ -14,6 +24,13 @@ def get_model_config():
 
 
 def get_trainer_config():
+    """
+    Return the default trainer config.
+
+    Includes device selection, DataLoader workers, AdamW settings, gradient
+    clipping, the train/validation split ratio, and the largest ``block_size``
+    for which validation is run.
+    """
     C = CN()
     C.device = "auto"
 
@@ -34,6 +51,7 @@ def get_trainer_config():
 
 
 def get_all_config():
+    """Return the full config with ``system``, ``model`` and ``trainer`` sections."""
     C = CN()
     C.system = CN()
     C.system.seed = 3407
@@ -49,6 +67,12 @@ def get_all_config():
 
 
 def optimisation_space():
+    """
+    Return the hyperparameter search space for ``skopt.gp_minimize``.
+
+    The order of dimensions matches the argument order of
+    ``app.main.train_and_validate_llm_models``.
+    """
     return [
         Real(1e-5, 1e-2, name="learning_rate"),
         Integer(48, 128, name="n_embds"),

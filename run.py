@@ -1,9 +1,22 @@
+"""
+Streamlit front end for training the character model and running the GP optimiser.
+
+Launch with ``make run-streamlit-app``.
+"""
+
 import streamlit as st
 from app.main import train_and_validate_llm_models, optimise_hyperparameters_via_gp
 import matplotlib.pyplot as plt
 
 
 def run_app():             
+    """
+    Render the sidebar controls and results.
+
+    "Run Training" trains one model with the chosen hyperparameters and shows the
+    training loss curve and generated text samples. "Optimise GP" runs the
+    hyperparameter search and then retrains with the result.
+    """
     # Sidebar for hyperparameters
     st.sidebar.header("Hyperparameters")
     strm_learning_rate = st.sidebar.number_input(

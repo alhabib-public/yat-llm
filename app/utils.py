@@ -1,4 +1,6 @@
 """
+Shared helpers: seeding, run logging and the ``CfgNode`` config container.
+
 You shouldn't need to make any changes to this file.
 """
 
@@ -12,6 +14,7 @@ import torch
 
 
 def set_seed(seed):
+    """Seed Python, NumPy and PyTorch (CPU and all GPUs) for reproducible runs."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -19,7 +22,16 @@ def set_seed(seed):
 
 
 def setup_logging(config, run_idx):
-    """monotonous bookkeeping"""
+    """
+    monotonous bookkeeping
+
+    Creates ``config.system.work_dir`` if needed and writes the command-line
+    arguments of the current process to ``args.txt`` inside it.
+
+    Args:
+        config: Full CfgNode (see ``app.macros.get_all_config``).
+        run_idx: Currently unused.
+    """
     work_dir = config.system.work_dir
     # create the work directory if it doesn't already exist
     os.makedirs(work_dir, exist_ok=True)
@@ -29,7 +41,12 @@ def setup_logging(config, run_idx):
 
 
 class CfgNode:
-    """a lightweight configuration class inspired by yacs"""
+    """
+    a lightweight configuration class inspired by yacs
+
+    Attributes are set freely and nodes can be nested, e.g.
+    ``C.model = CfgNode(); C.model.n_embd = 48``.
+    """
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -57,6 +74,7 @@ class CfgNode:
         }
 
     def merge_from_dict(self, d):
+        """Shallow-update the config's attributes from dict ``d``."""
         self.__dict__.update(d)
 
     def merge_from_args(self, args):
@@ -79,12 +97,10 @@ class CfgNode:
 
             # first translate val into a python object
             try:
+                # need some explanation here.
+                # - if val is simply a string, literal_eval will throw a ValueError
+                # - if val represents a thing (like an 3, 3.14, [1,2,3], False, None, etc.) it will get created
                 val = literal_eval(val)
-                """
-                need some explanation here.
-                - if val is simply a string, literal_eval will throw a ValueError
-                - if val represents a thing (like an 3, 3.14, [1,2,3], False, None, etc.) it will get created
-                """
             except ValueError:
                 pass
 
