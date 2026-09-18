@@ -1,3 +1,12 @@
+"""
+Training, validation and hyperparameter search for the feedforward character model.
+
+Entry points:
+    - ``train_and_validate_llm_models``: train one model for a given set of hyperparameters.
+    - ``optimise_hyperparameters_via_gp``: Bayesian (Gaussian-process) search over
+      the space defined in ``app.macros.optimisation_space``.
+"""
+
 import torch
 
 from app.trainer import Trainer
@@ -12,6 +21,18 @@ from skopt.utils import use_named_args
 
 
 def get_val_dataset(config, val_data):
+    """
+    Build every sliding-window example from the encoded validation text.
+
+    Args:
+        config: Full CfgNode; ``config.model.block_size`` sets the window length.
+        val_data: List of token indices for the validation split.
+
+    Returns:
+        Tuple ``(inputs, targets)`` of LongTensors, each with shape
+        ``(len(val_data) - block_size, block_size)``. ``targets`` is ``inputs``
+        shifted one token to the right.
+    """
     inputs, targets = [], []
     for idx in range(len(val_data) - config.model.block_size):
         inputs.append(val_data[idx : idx + config.model.block_size])
@@ -28,6 +49,23 @@ __spec__ = (
 
 
 def train(config, train_dataset):
+    """
+    Build a ``Feedforward`` model and train it on ``train_dataset``.
+
+    Every 10 iterations the training loss is logged and appended to the loss
+    history. Every 500 iterations (including iteration 0) the model generates
+    500 characters, starting from the first ``block_size`` characters of
+    ``data/context.txt``.
+
+    Args:
+        config: Full CfgNode. ``config.model.vocab_size`` and
+            ``config.model.block_size`` are overwritten from the dataset.
+        train_dataset: A ``CharDataset`` for the training split.
+
+    Returns:
+        Tuple ``(model, loss_history, all_completions)``: the trained model, the
+        list of sampled training losses, and the list of generated text samples.
+    """
     print(config)
     setup_logging(config, 0)
     set_seed(config.system.seed)
@@ -81,6 +119,24 @@ def train(config, train_dataset):
 def train_and_validate_llm_models(
     learning_rate, n_embds, epochs, block_size, depth, width
 ):
+    """
+    Train a model on ``data/input.txt`` with the given hyperparameters.
+
+    The first ``split_ratio`` of the text is used for training and the rest for
+    validation. Validation is skipped when ``block_size`` exceeds
+    ``trainer.maximum_validation_block_size`` because it runs in a single pass.
+
+    Args:
+        learning_rate: AdamW learning rate.
+        n_embds: Embedding dimension per character.
+        epochs: Number of training iterations (batches), not full passes over the data.
+        block_size: Context length in characters.
+        depth: Number of hidden layers (see ``Feedforward.build_fnn``).
+        width: log2 of the first hidden layer's size.
+
+    Returns:
+        Tuple ``(loss_history, all_completions)``. See ``train``.
+    """
     # construct the entire dataset
     with open("data/input.txt", "r") as f:
         data = f.read()
@@ -114,6 +170,20 @@ def train_and_validate_llm_models(
 
 
 def optimise_hyperparameters_via_gp(n_calls=10):
+    """
+    Search for good hyperparameters with Gaussian-process Bayesian optimisation.
+
+    Each evaluation trains a full model via ``train_and_validate_llm_models`` and
+    uses the final sampled training loss as the objective to minimise.
+
+    Args:
+        n_calls: Number of models to train during the search.
+
+    Returns:
+        ``scipy.optimize.OptimizeResult`` from ``skopt.gp_minimize``; the best
+        hyperparameters are in ``result.x`` (in ``optimisation_space`` order) and
+        the best loss is in ``result.fun``.
+    """
     # Define the objective function
     space = optimisation_space()
 

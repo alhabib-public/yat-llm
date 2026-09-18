@@ -11,7 +11,23 @@ import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
 
 class Trainer:
+    """
+    Runs the optimisation loop for a model on a dataset.
+
+    Batches are drawn with replacement from ``train_dataset`` until
+    ``config.max_iters`` iterations have run. After every iteration the
+    ``"on_batch_end"`` callbacks are invoked with the trainer, which exposes
+    ``iter_num``, ``iter_dt`` (seconds for the last iteration) and ``loss``.
+    """
+
     def __init__(self, config, model, train_dataset):
+        """
+        Args:
+            config: Trainer CfgNode (see ``app.macros.get_trainer_config``).
+                ``device="auto"`` selects CUDA when available, else CPU.
+            model: The ``nn.Module`` to train; it is moved to the chosen device.
+            train_dataset: A ``torch.utils.data.Dataset`` yielding ``(x, y)`` pairs.
+        """
         self.config = config
         self.model = model
         self.optimizer = None
@@ -33,16 +49,27 @@ class Trainer:
         self.iter_dt = 0.0
 
     def add_callback(self, onevent: str, callback):
+        """Register ``callback(trainer)`` to run on ``onevent``, keeping existing ones."""
         self.callbacks[onevent].append(callback)
 
     def set_callback(self, onevent: str, callback):
+        """Register ``callback(trainer)`` as the only callback for ``onevent``."""
         self.callbacks[onevent] = [callback]
 
     def trigger_callbacks(self, onevent: str):
+        """Call every callback registered for ``onevent`` with this trainer."""
         for callback in self.callbacks.get(onevent, []):
             callback(self)
 
     def run(self):
+        """
+        Train the model for ``config.max_iters`` iterations.
+
+        Each iteration takes one batch, computes the cross-entropy loss of the
+        model's single next-token prediction against the last target token
+        (``y[:, -1]``), clips gradients to ``config.grad_norm_clip`` and takes one
+        AdamW step. The latest loss is stored on ``self.loss``.
+        """
         model, config = self.model, self.config
 
         # setup the optimizer
@@ -119,6 +146,15 @@ class Trainer:
         We are separating out all parameters of the model into two buckets: those that will experience
         weight decay for regularization and those that won't (biases).
         We are then returning the PyTorch optimizer object.
+
+        Linear weights are decayed; biases and embedding weights are not.
+
+        Args:
+            train_config: Trainer CfgNode providing ``weight_decay``,
+                ``learning_rate`` and ``betas``.
+
+        Returns:
+            torch.optim.AdamW: Optimizer with separate decay / no-decay groups.
         """
         # separate out all parameters to those that will and won't experience regularizing weight decay
         decay = set()
